@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "bin": {
+    "chaoscraft": "index.js"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -17,6 +20,10 @@
   },
   "homepage": "https://github.com/schematical/chaoscraft-cli#readme",
   "dependencies": {
-    "inquirer": "^6.1.0"
+    "config": "^2.0.1",
+    "forever": "^0.15.3",
+    "inquirer": "^6.1.0",
+    "request": "^2.88.0",
+    "underscore": "^1.9.1"
   }
 }
