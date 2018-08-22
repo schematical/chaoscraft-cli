@@ -20,10 +20,14 @@
   },
   "homepage": "https://github.com/schematical/chaoscraft-cli#readme",
   "dependencies": {
+    "commander": "^2.17.1",
     "config": "^2.0.1",
+    "extract-zip": "^1.6.7",
     "forever": "^0.15.3",
+    "fs-extra": "^7.0.0",
     "inquirer": "^6.1.0",
     "request": "^2.88.0",
+    "typescript": "^3.0.1",
     "underscore": "^1.9.1"
   }
 }

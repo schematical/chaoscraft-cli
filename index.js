@@ -3,8 +3,10 @@ const inquirer = require('inquirer');
 const forever = require('forever-monitor');
 const _ = require('underscore');
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs-extra');
 const request = require('request');
+const program = require('commander');
+const { exec } = require('child_process');
 process.env["NODE_CONFIG_DIR"] = path.join(__dirname, "config");
 const config = require('config');
 
@@ -26,8 +28,15 @@ class App{
         this._childCount = 0;
         this._children = {};
     }
-    Run(){
-        return this.PromptMain();
+    Run(cmd){
+        switch(cmd){
+            case('pull'):
+                return this.Pull();
+            default:
+                console.log("Prompting Main...");
+                return this.PromptMain();
+        }
+
     }
     PromptMain(){
         return inquirer
@@ -51,29 +60,29 @@ class App{
             });
     }
     Start(){
-        return inquirer
+        /*return inquirer
             .prompt([
-                /* Pass your questions in here */
-                {type: 'input', name: 'chaoscraft_repo_path', default:  process.cwd()  },
+                /!* Pass your questions in here *!/
+                {type: 'input', name: 'chaoscraft_repo_path', default:  path.join(process.cwd(), 'chaoscraft-master')  },
                 {type: 'input', name: 'count', default:  1  },
                 {type: 'input', name: 'log_dir', default:  path.join(process.cwd(), 'logs') }
             ])
-            .then(answers => {
+            .then(answers => {*/
 
                 return new Promise((resolve, reject)=>{
-
+console.log("Starting: " + config.get('local.chaoscraft_bot_repo_path'));
                     try {
-                        if(!fs.existsSync(answers.log_dir)){
-                            fs.mkdirSync(answers.log_dir);
+                        if(!fs.existsSync(config.get('local.log_dir'))){
+                            fs.mkdirSync(config.get('local.log_dir'));
                         }
-                        let logFile = path.join(answers.log_dir, this._childCount + '.log');
+                        let logFile = path.join(config.get('local.log_dir'), this._childCount + '.log');
                         var child = new (forever.Monitor)('index.js', {
                             max: 3,
                             silent: true,
                             args: [],
                             sourceDir: 'dist',
-                            cwd: answers.chaoscraft_repo_path,
-                            env: {NODE_ENV: 'production'},
+                            cwd: config.get('local.chaoscraft_bot_repo_path'),
+                            env: { NODE_ENV: 'production'},
                             outFile: logFile,
                             errFile: logFile
                         });
@@ -90,10 +99,10 @@ class App{
                     console.log("Process Started");
                     return resolve();
                 })
-                .then(()=>{
+                /*.then(()=>{
                     return this.PromptMain();
                 })
-            });
+            });*/
 
     }
     List(){
@@ -112,12 +121,14 @@ class App{
     }
     Pull(){
         let zipPath = path.join(process.cwd(), 'chaoscraft-source.zip');
+
         return new Promise((resolve, reject)=>{
-            console.log("Starting Download...");
+            let repoUrl = config.get('repo.zip_url');
+            console.log("Starting Download... " + repoUrl);
             request(
-                config.get('repo.zip_url')
+                repoUrl
             ).pipe(fs.createWriteStream(zipPath))
-                .on('end', ()=>{
+                .on('finish', ()=>{
                     console.log(" Download End...");
                     return resolve();
                 })
@@ -127,8 +138,10 @@ class App{
                 });
         })
         .then(()=>{
+            console.log("Moving on...");
             return new Promise((resolve, reject)=>{
-                var extract = require('extract-zip')
+                var extract = require('extract-zip');
+                console.log("Extracting: " + zipPath + ' - ' + process.cwd());
                 extract(zipPath, {dir: process.cwd() }, function (err) {
                     // extraction is complete. make sure to handle the err
                     if(err) return reject(err);
@@ -138,6 +151,57 @@ class App{
             })
 
         })
+        .then(()=>{
+            return new Promise((resolve, reject)=>{
+                console.log("Running `npm install`..");
+
+                return exec(
+                    'npm i',
+                    {
+                        cwd: config.get('local.chaoscraft_bot_repo_path')
+                    },
+                    (err) => {
+                        if(err){
+                            return reject(err);
+                        }
+                        console.log("`npm install` finished");
+                        return resolve();
+                    }
+                );
+
+            })
+        })
+        .then(()=>{
+            return new Promise((resolve, reject)=>{
+                console.log("Running `tsc`..");
+                return exec(
+                    path.join(__dirname, 'node_modules', 'typescript', 'bin', 'tsc'),
+                    {
+                        cwd: config.get('local.chaoscraft_bot_repo_path')
+                    },
+                    (err, stdout, stderror) => {
+                        if(err){
+                            console.error("`tsc` finished with error: ")
+                                console.log(stdout);
+                            console.log(stderror);
+                            return reject(err);
+                        }
+                        console.log("`tsc` finished successfully");
+                        return resolve();
+                    }
+                );
+            })
+        })
+        .then(()=>{
+            console.log("ChaosCraft - Pull and Build Finished Successfully");
+        })
+        /*.then(()=>{
+            return inquirer
+                .prompt([
+                    /!* Pass your questions in here *!/
+                    {type: 'input', name: 'done' },
+                ])
+        })*/
         .catch((err)=>{
             console.error("Err:", err.message, err.stack);
         })
@@ -177,4 +241,41 @@ class ChildProcess{
 
 
 let app = new App();
-app.Run();
+
+program
+    .version('0.1.0')
+    .action(function () {
+        console.log("Show Help")
+    });
+
+program
+    .command('pull')
+    //.arguments('pull')
+    .description('Pulls down the latest version of the code from the repos and builds it')
+    .action(function () {
+        app.Pull();
+    });
+
+program
+    .command('start')
+    .option("-c, --count [count]", "How many bots to start")
+    //.arguments('')
+    .description('Starts running the bots')
+    .action(function () {
+        app.Start();
+    });
+
+program
+    .command('init')
+    //.arguments('')
+    .description('Setsup your local env for ChaosCraft')
+    .action(function () {
+        app.Init();
+    });
+
+
+if (!process.argv.slice(2).length || !/[arudl]/.test(process.argv.slice(2))) {
+    program.outputHelp();
+    process.exit();
+}
+program.parse(process.argv);
